@@ -1,14 +1,14 @@
 {
-  "name": "学習タイマー",
-  "short_name": "タイマー",
-  "description": "10分・5分・1分・30秒・10秒ずつ足せる学習用カウントダウンタイマー",
+  "name": "Pomodoro Timer",
+  "short_name": "集中タイマー",
+  "description": "Pomodoro Timer（集中タイマー）— a countdown timer for focused sessions",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
   "orientation": "any",
   "background_color": "#f7f6f2",
   "theme_color": "#f7f6f2",
-  "lang": "ja",
+  "lang": "en",
   "icons": [
     { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
     { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },

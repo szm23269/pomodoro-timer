@@ -1,17 +1,19 @@
 <!DOCTYPE html>
-<html lang="ja">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>学習タイマー</title>
+<title>Pomodoro Timer</title>
+<meta name="apple-mobile-web-app-title" content="集中タイマー">
+<meta name="application-name" content="Pomodoro Timer">
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#f7f6f2">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Zen+Kaku+Gothic+New:wght@500;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:wght@300;400;500&display=swap" rel="stylesheet">
 <style>
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
   html,body{height:100%;margin:0}
@@ -29,7 +31,7 @@
 
     background:radial-gradient(120% 90% at 50% -10%, var(--bg2) 0%, var(--bg) 60%);
     color:var(--ink);
-    font-family:"Zen Kaku Gothic New",-apple-system,system-ui,sans-serif;
+    font-family:"DM Mono",-apple-system,system-ui,monospace;
     display:flex;flex-direction:column;
     padding:max(18px,env(safe-area-inset-top)) 20px max(18px,env(safe-area-inset-bottom));
     overflow:hidden;user-select:none;-webkit-user-select:none;
@@ -71,21 +73,45 @@
   .mark{font-family:"DM Mono",monospace;font-size:13px;letter-spacing:.28em;text-transform:uppercase;color:var(--dim)}
   .state{margin-left:auto;font-family:"DM Mono",monospace;font-size:13px;letter-spacing:.2em;color:var(--accent)}
 
-  main{flex:1 1 auto;display:flex;align-items:center;justify-content:center;min-height:0}
-  .dial{position:relative;width:min(42vh,70vw);aspect-ratio:1}
-  .dial svg{position:absolute;inset:0;width:100%;height:100%;transform:rotate(-90deg)}
-  .track{fill:none;stroke:var(--line);stroke-width:6}
-  .arc{fill:none;stroke:var(--accent);stroke-width:6;stroke-linecap:round}
-  .readout{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px}
-  .time{
-    font-family:"DM Mono",monospace;font-weight:300;
-    font-size:min(14vh,21vw);line-height:.9;
-    font-variant-numeric:tabular-nums;letter-spacing:-.03em;
+  main{flex:1 1 auto;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:clamp(16px,3.5vh,40px);min-height:0;width:100%}
+  .readout{
+    display:flex;flex-direction:column;align-items:center;gap:8px;
+    padding:2vh 8vw;margin:-2vh -8vw;          /* 見た目は変えずに当たり判定だけ広げる */
+    touch-action:none;cursor:ns-resize;
   }
+  body.run .readout{cursor:default}
+  .time{
+    font-family:"Bebas Neue",sans-serif;font-weight:400;
+    font-size:min(30vh,44vw);line-height:.86;
+    font-variant-numeric:tabular-nums;letter-spacing:.01em;
+    pointer-events:none;                       /* 判定は readout 側で受ける */
+    transition:color .15s;
+  }
+  .time .d,.time .colon{display:inline-block;text-align:center;transition:color .12s}
+  .time .d{width:.42em}
+  .time .colon{width:.2em;opacity:.55;transform:translateY(var(--colon-shift,0em))}
+  .time .d.active{color:var(--accent)}
   .sub{font-family:"DM Mono",monospace;font-size:12px;letter-spacing:.3em;color:var(--dim)}
 
+  /* 目盛りバー（20個・右から左へ消えていく） */
+  .bar{
+    flex:0 0 auto;width:100%;display:grid;grid-template-columns:repeat(20,1fr);
+    gap:clamp(3px,.8vw,7px);height:clamp(114px,24vh,234px);
+  }
+  .seg{
+    border-radius:4px;background:var(--seg);
+    transition:none;transform-origin:bottom;will-change:transform;
+  }
+  .seg.off{opacity:0}
+  body.run .seg{box-shadow:0 0 16px -5px var(--seg)}
+  body.run .seg.off{box-shadow:none}
+  .seg:nth-child(-n+3){--seg:#e05a4e}
+  .seg:nth-child(n+4):nth-child(-n+7){--seg:#eb8f2f}
+  .seg:nth-child(n+8):nth-child(-n+12){--seg:#e8c04a}
+  .seg:nth-child(n+13){--seg:#5fb98a}
+
   /* 履歴 */
-  .history{flex:0 0 auto;display:flex;gap:12px;align-items:center;margin:0 0 12px;min-height:48px}
+  .history{flex:0 0 auto;display:flex;gap:12px;align-items:center;margin:0 0 10px;min-height:44px}
   .history .label{font-family:"DM Mono",monospace;font-size:11px;letter-spacing:.22em;color:var(--dim);flex:0 0 auto}
   .history .chips{
     display:flex;gap:10px;flex:1 1 auto;min-width:0;
@@ -100,21 +126,22 @@
   .history .chips::-webkit-scrollbar{display:none}
   .history button{
     appearance:none;border:1px solid var(--line);border-radius:999px;background:var(--btn-bg);
-    color:var(--ink);padding:11px 20px;font-family:"DM Mono",monospace;font-size:16px;
+    color:var(--ink);padding:9px 20px;font-family:"Bebas Neue",sans-serif;font-size:23px;line-height:1.1;
     font-variant-numeric:tabular-nums;flex:0 0 auto;white-space:nowrap;scroll-snap-align:start;
     transition:transform .08s,background .15s;
   }
   .history button:active{transform:scale(.95)}
   .history .empty{font-size:13px;color:var(--dim);letter-spacing:.06em}
+  .sub{max-width:90vw;text-align:center}
 
   .adders{flex:0 0 auto;display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin:0 0 12px}
   .adders button{
     appearance:none;border:1px solid var(--line);border-radius:16px;background:var(--btn-bg);
-    color:var(--ink);padding:16px 6px;font-family:"DM Mono",monospace;font-size:clamp(17px,2.5vh,24px);
+    color:var(--ink);padding:14px 6px;font-family:"Bebas Neue",sans-serif;font-size:clamp(24px,3.4vh,34px);line-height:1;
     transition:transform .08s,background .15s;
   }
   .adders button:active{transform:scale(.95)}
-  .adders button small{display:block;font-size:11px;letter-spacing:.2em;color:var(--dim);margin-top:4px}
+  .adders button small{display:block;font-family:"DM Mono",monospace;font-size:11px;letter-spacing:.14em;color:var(--dim);margin-top:4px}
 
   .controls{flex:0 0 auto;display:grid;grid-template-columns:1fr 2.4fr;gap:12px}
   .controls button{
@@ -122,52 +149,159 @@
     font-family:"Zen Kaku Gothic New",sans-serif;transition:transform .08s,background .3s,color .3s;
   }
   .controls button:active{transform:scale(.98)}
+  .controls button{display:flex;align-items:center;justify-content:center}
+  .controls svg{width:clamp(26px,4vh,40px);height:clamp(26px,4vh,40px)}
+  #toggle svg{width:clamp(34px,5vh,52px);height:clamp(34px,5vh,52px)}
+  .history .label{display:flex;align-items:center}
   #reset{background:transparent;border:1px solid var(--line);color:var(--dim);font-size:clamp(15px,2.1vh,20px);padding:21px 0}
   #toggle{background:var(--main-bg);color:var(--main-ink);font-size:clamp(20px,3vh,30px);padding:21px 0}
   button:focus-visible{outline:3px solid var(--accent);outline-offset:3px}
   @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+  .icon-btn{
+    appearance:none;border:none;background:transparent;color:var(--dim);
+    width:44px;height:44px;margin:-10px -10px -10px 4px;padding:10px;border-radius:50%;
+    display:flex;align-items:center;justify-content:center;flex:0 0 auto;
+  }
+  .icon-btn svg{width:24px;height:24px}
+  .icon-btn:active{transform:scale(.92)}
+  header{align-items:center}
+
+  dialog#guide{
+    border:none;padding:0;margin:auto;max-width:min(560px,92vw);max-height:86vh;width:100%;
+    border-radius:22px;background:var(--bg2);color:var(--ink);
+    box-shadow:0 30px 80px -20px rgba(0,0,0,.45);
+  }
+  dialog#guide::backdrop{background:rgba(10,14,13,.45);backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px)}
+  .sheet{padding:22px 26px 28px;overflow-y:auto;max-height:86vh;font-family:-apple-system,system-ui,sans-serif;font-size:15px;line-height:1.55}
+  .sheet-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
+  .sheet h2{font-family:"Bebas Neue",sans-serif;font-weight:400;font-size:34px;letter-spacing:.02em;margin:0}
+  .sheet h3{font-family:"DM Mono",monospace;font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:var(--accent);margin:22px 0 8px}
+  .sheet ul,.sheet ol{margin:0;padding-left:1.3em}
+  .sheet li{margin:6px 0}
+  .sheet section{border-top:1px solid var(--line);margin-top:14px}
+  .sheet .note{font-size:13px;color:var(--dim);margin:10px 0 0}
+  .sheet svg.inline{width:18px;height:18px;vertical-align:-3px;color:var(--ink)}
+  #guide:not([data-lang="ja"]) [data-l="ja"],
+  #guide[data-lang="ja"] [data-l="en"]{display:none}
+  #guide[data-lang="ja"] .sheet{font-family:-apple-system,"Hiragino Sans","Noto Sans JP",system-ui,sans-serif}
+  #guide[data-lang="ja"] .sheet h3{letter-spacing:.08em}
+  .ver{font-family:"DM Mono",monospace;font-size:11px;letter-spacing:.12em;color:var(--dim);opacity:.75;margin-left:14px}
 </style>
 </head>
 <body>
 
 <header>
-  <span class="mark">学習タイマー</span>
+  <span class="mark">Pomodoro Timer</span>
   <span class="state" id="state"></span>
+  <span class="ver" id="ver"></span>
+  <button id="help" class="icon-btn" aria-label="How to use">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5"/><path d="M9.4 9.3a2.7 2.7 0 0 1 5.2 1c0 1.8-2.6 2.4-2.6 4"/><circle cx="12" cy="17.4" r=".6" fill="currentColor"/></svg>
+  </button>
 </header>
 
-<main>
-  <div class="dial">
-    <svg viewBox="0 0 200 200">
-      <circle class="track" cx="100" cy="100" r="92"></circle>
-      <circle class="arc" id="arc" cx="100" cy="100" r="92" stroke-dasharray="578.05" stroke-dashoffset="578.05"></circle>
-    </svg>
-    <div class="readout">
-      <div class="time" id="time">00:00</div>
-      <div class="sub" id="sub">時間を足してください</div>
+<dialog id="guide" aria-labelledby="guide-title">
+  <div class="sheet">
+    <div class="sheet-head">
+      <h2 id="guide-title"><span data-l="en">How to use</span><span data-l="ja">使い方</span></h2>
+      <button class="icon-btn" id="guide-close" aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    </div>
+
+    <div data-l="en">
+      <section>
+        <h3>Add to Home Screen — iPhone / iPad</h3>
+        <ol>
+          <li>Open this page in <b>Safari</b>.</li>
+          <li>Tap the <b>Share</b> button <svg class="inline" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="M8 7l4-4 4 4"/><path d="M6 11v8a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2v-8"/></svg>.</li>
+          <li>Scroll down and choose <b>Add to Home Screen</b>.</li>
+          <li>Tap <b>Add</b>. Launch it from the new icon to use it full screen.</li>
+        </ol>
+        <p class="note">Sound won’t play while the silent switch is on.</p>
+      </section>
+      <section>
+        <h3>Add to Home Screen — Android</h3>
+        <ol>
+          <li>Open this page in <b>Chrome</b>.</li>
+          <li>Tap the <b>menu</b> <svg class="inline" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="12" cy="19" r="1.8"/></svg> at the top right.</li>
+          <li>Choose <b>Add to Home screen</b> or <b>Install app</b>.</li>
+          <li>Tap <b>Install</b> (or <b>Add</b>) to confirm.</li>
+        </ol>
+      </section>      <section>
+        <h3>Timer</h3>
+        <ul>
+          <li><b>Set</b> — tap <i>min</i> / <i>sec</i> buttons to add time, or swipe a digit up/down. Digits carry over (59 sec → 1 min).</li>
+          <li><b>History</b> — your last 20 durations. Tap one to load it. Scroll sideways for more.</li>
+          <li><b>Start / Pause</b> — the large button. The screen turns dark while running.</li>
+          <li><b>Reset</b> — clears the time to 00:00.</li>
+          <li>When time is up, a bell rings and the same duration is loaded again, ready to repeat.</li>
+        </ul>
+      </section>
+    </div>
+
+    <div data-l="ja">
+      <section>
+        <h3>ホーム画面に追加 — iPhone / iPad</h3>
+        <ol>
+          <li><b>Safari</b> でこのページを開く。</li>
+          <li><b>共有</b>ボタン <svg class="inline" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="M8 7l4-4 4 4"/><path d="M6 11v8a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2v-8"/></svg> をタップ。</li>
+          <li>下にスクロールして <b>ホーム画面に追加</b> を選ぶ。</li>
+          <li><b>追加</b> をタップ。追加されたアイコンから起動すると全画面で使えます。</li>
+        </ol>
+        <p class="note">消音スイッチがオンだと音は鳴りません。</p>
+      </section>
+      <section>
+        <h3>ホーム画面に追加 — Android</h3>
+        <ol>
+          <li><b>Chrome</b> でこのページを開く。</li>
+          <li>右上の <b>メニュー</b> <svg class="inline" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="12" cy="19" r="1.8"/></svg> をタップ。</li>
+          <li><b>ホーム画面に追加</b> または <b>アプリをインストール</b> を選ぶ。</li>
+          <li><b>インストール</b>（または <b>追加</b>）をタップして確定。</li>
+        </ol>
+      </section>      <section>
+        <h3>タイマー</h3>
+        <ul>
+          <li><b>時間の設定</b> — <i>min</i>／<i>sec</i> のボタンで時間を足すか、数字の桁を上下にスワイプ。上限を超えると上の桁に繰り上がります（59秒 → 1分）。</li>
+          <li><b>履歴</b> — 直近20回分の時間。タップでその時間をセット。横にスライドで過去分を表示。</li>
+          <li><b>スタート／一時停止</b> — 大きなボタン。計測中は画面が黒くなります。</li>
+          <li><b>リセット</b> — 00:00 に戻します。</li>
+          <li>時間になるとベルが鳴り、同じ時間が再セットされるので、そのまま繰り返せます。</li>
+        </ul>
+      </section>
     </div>
   </div>
+</dialog>
+
+<main>
+  <div class="readout">
+    <div class="time" id="time" aria-label="Time remaining"><span class="d" data-u="m10">0</span><span class="d" data-u="m1">0</span><span class="colon">:</span><span class="d" data-u="s10">0</span><span class="d" data-u="s1">0</span></div>
+    <div class="sub" id="sub">Swipe a digit to set</div>
+  </div>
+  <div class="bar" id="bar" aria-hidden="true"></div>
 </main>
 
+
 <div class="history">
-  <span class="label">履歴</span>
-  <div class="chips" id="chips"><span class="empty">スタートすると残ります</span></div>
+  <span class="label" aria-label="History"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v4h4"/><path d="M12 7.5V12l3 2"/></svg></span>
+  <div class="chips" id="chips"><span class="empty">No history yet</span></div>
 </div>
 
 <div class="adders">
-  <button data-add="600">10<small>分</small></button>
-  <button data-add="300">5<small>分</small></button>
-  <button data-add="60">1<small>分</small></button>
-  <button data-add="30">30<small>秒</small></button>
-  <button data-add="10">10<small>秒</small></button>
+  <button data-add="600">10<small>min</small></button>
+  <button data-add="300">5<small>min</small></button>
+  <button data-add="60">1<small>min</small></button>
+  <button data-add="30">30<small>sec</small></button>
+  <button data-add="10">10<small>sec</small></button>
 </div>
 
 <div class="controls">
-  <button id="reset">リセット</button>
-  <button id="toggle">スタート</button>
+  <button id="reset" aria-label="Reset"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v4h4"/></svg></button>
+  <button id="toggle" aria-label="Start"></button>
 </div>
 
 <script>
-const CIRC = 2 * Math.PI * 92;
+const APP_VERSION = 'v18';
+const SEGMENTS = 20;
+const ICON_PLAY  = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4.5v15a1 1 0 0 0 1.5.86l12.4-7.5a1 1 0 0 0 0-1.72L8.5 3.64A1 1 0 0 0 7 4.5z"/></svg>';
+const ICON_PAUSE = '<svg viewBox="0 0 24 24" fill="currentColor"><rect x="5.5" y="4" width="4.5" height="16" rx="1.2"/><rect x="14" y="4" width="4.5" height="16" rx="1.2"/></svg>';
 let total = 0, remain = 0, running = false, done = false;
 let last = 0, raf = null, ctx = null;
 let history = [];   // 直近20件（新しい順）
@@ -179,34 +313,47 @@ try {
 
 const $time = document.getElementById('time');
 const $sub = document.getElementById('sub');
-const $arc = document.getElementById('arc');
+const $bar = document.getElementById('bar');
+const digitEls = {};
+document.querySelectorAll('#time .d').forEach(el=>{ digitEls[el.dataset.u] = el; });
 const $toggle = document.getElementById('toggle');
 const $state = document.getElementById('state');
 const $chips = document.getElementById('chips');
 
+const MAX = 99*60 + 59;
 function fmt(s){
-  s = Math.max(0, Math.ceil(s));
-  const h = Math.floor(s/3600), m = Math.floor(s%3600/60), sec = s%60;
-  const mm = String(m).padStart(2,'0'), ss = String(sec).padStart(2,'0');
-  return h ? `${h}:${mm}:${ss}` : `${mm}:${ss}`;
+  s = Math.min(MAX, Math.max(0, Math.ceil(s)));
+  const m = Math.floor(s/60), sec = s%60;
+  return `${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
 }
 
 function render(){
   document.body.classList.toggle('run', running);
   document.body.classList.toggle('done', done);
-  $time.textContent = fmt(remain);
+  const t = fmt(remain);
+  digitEls.m10.textContent = t[0]; digitEls.m1.textContent = t[1];
+  digitEls.s10.textContent = t[3]; digitEls.s1.textContent = t[4];
   const ratio = total > 0 ? Math.max(0, remain/total) : 0;
-  $arc.style.strokeDashoffset = CIRC * (1 - ratio);
-  $toggle.textContent = running ? 'ストップ' : 'スタート';
-  $state.textContent = running ? '計測中' : (done ? '終了' : '');
-  $sub.textContent = done ? 'おつかれさま'
-    : total === 0 ? '時間を足してください'
-    : running ? '集中' : '一時停止中';
+  const filled = ratio * SEGMENTS;
+  segs.forEach((el,i)=>{
+    // 左から i 番目。右端から順に消えていく
+    const level = Math.min(1, Math.max(0, filled - i));
+    // 減るときは上から縮み、最後は下端まで完全に消える
+    el.style.transform = `scaleY(${level.toFixed(4)})`;
+    el.style.opacity = level.toFixed(4);          // 縮むのと同じ割合で透明に
+    el.classList.toggle('off', level <= 0);
+  });
+  $toggle.innerHTML = running ? ICON_PAUSE : ICON_PLAY;
+  $toggle.setAttribute('aria-label', running ? 'Pause' : 'Start');
+  $state.textContent = running ? 'RUNNING' : (done ? 'DONE' : '');
+  $sub.textContent = done ? 'Well done'
+    : total === 0 ? 'Swipe a digit to set'
+    : running ? 'Focus' : 'Paused';
 }
 
 function renderHistory(){
   if (!history.length){
-    $chips.innerHTML = '<span class="empty">スタートすると残ります</span>';
+    $chips.innerHTML = '<span class="empty">No history yet</span>';
     return;
   }
   $chips.innerHTML = '';
@@ -299,13 +446,78 @@ function stop(){
   render();
 }
 
+/* ---- 桁ごとに上下スワイプ（iPhoneのタイマー風） ---- */
+// 触った位置にいちばん近い桁を掴んで回す。上限を超えたら上の桁へ繰り上がり、
+// 0を下回ったら上の桁から繰り下がる（全体は 00:00〜99:59 の範囲で止まる）
+const UNITS = {
+  m10:{range:10, weight:600},
+  m1: {range:10, weight:60},
+  s10:{range:6,  weight:10},
+  s1: {range:10, weight:1}
+};
+const STEP_PX = 22;
+const $readout = document.querySelector('.readout');
+
+function split(v){
+  v = Math.min(MAX, Math.max(0, Math.ceil(v)));
+  const m = Math.floor(v/60), sec = v%60;
+  return { m10:Math.floor(m/10), m1:m%10, s10:Math.floor(sec/10), s1:sec%10 };
+}
+function join(d){ return d.m10*600 + d.m1*60 + d.s10*10 + d.s1; }
+
+function pickDigit(x){
+  let best = null, dist = Infinity;
+  for (const u in digitEls){
+    const r = digitEls[u].getBoundingClientRect();
+    const d = Math.abs(x - (r.left + r.width/2));
+    if (d < dist){ dist = d; best = u; }
+  }
+  return best;
+}
+
+let drag = null;
+$readout.addEventListener('pointerdown', e=>{
+  if (running) return;
+  e.preventDefault();
+  const unit = pickDigit(e.clientX);
+  const digits = split(remain);
+  drag = { id:e.pointerId, y:e.clientY, unit, base:join(digits), last:null };
+  $readout.setPointerCapture(e.pointerId);
+  digitEls[unit].classList.add('active');
+});
+
+$readout.addEventListener('pointermove', e=>{
+  if (!drag || e.pointerId !== drag.id) return;
+  const pts = e.getCoalescedEvents ? e.getCoalescedEvents() : [];
+  const y = pts.length ? pts[pts.length-1].clientY : e.clientY;
+  const notches = Math.trunc((drag.y - y) / STEP_PX);       // 上へ＝増える
+  if (notches === 0 && drag.last === null) return;            // タップだけでは変えない
+  const val = Math.min(MAX, Math.max(0, drag.base + notches * UNITS[drag.unit].weight));
+  if (val === drag.last) return;
+  drag.last = val;
+  audio();
+  done = false;
+  remain = total = val;                                       // 繰り上がり・繰り下がりは足し算で自然に起きる
+  render();
+});
+
+function endDrag(e){
+  if (!drag || e.pointerId !== drag.id) return;
+  digitEls[drag.unit].classList.remove('active');
+  drag = null;
+  try { $readout.releasePointerCapture(e.pointerId); } catch(err){}
+  render();
+}
+$readout.addEventListener('pointerup', endDrag);
+$readout.addEventListener('pointercancel', endDrag);
+
 /* ---- 操作 ---- */
 document.querySelectorAll('[data-add]').forEach(b=>{
   b.addEventListener('click', ()=>{
     audio();
     done = false;
     const add = +b.dataset.add;
-    remain += add; total += add;
+    remain = Math.min(MAX, remain + add); total = Math.min(MAX, total + add);
     render();
   });
 });
@@ -318,6 +530,48 @@ document.addEventListener('visibilitychange', ()=>{
   if(!document.hidden){ last = performance.now(); if (running) keepAwake(true); }
 });
 document.addEventListener('dblclick', e=>e.preventDefault());
+
+// 目盛りを並べる
+const segs = [];
+for (let i=0;i<SEGMENTS;i++){
+  const d = document.createElement('div');
+  d.className = 'seg off';
+  $bar.appendChild(d); segs.push(d);
+}
+
+/* ---- コロンを数字の縦中央に合わせる ----
+   フォントごとに「:」の高さが違うので、実際の字形を測って補正量を出す */
+function centerColon(){
+  try {
+    const c = document.createElement('canvas').getContext('2d');
+    c.font = '400 200px "Bebas Neue"';
+    const d = c.measureText('0'), k = c.measureText(':');
+    const digitMid = (d.actualBoundingBoxAscent - d.actualBoundingBoxDescent) / 2;
+    const colonMid = (k.actualBoundingBoxAscent - k.actualBoundingBoxDescent) / 2;
+    const shiftEm = (colonMid - digitMid) / 200;   // 上向きが正 → translateY は負方向
+    $time.style.setProperty('--colon-shift', shiftEm.toFixed(4) + 'em');
+  } catch(e){}
+}
+if (document.fonts && document.fonts.load){
+  document.fonts.load('400 100px "Bebas Neue"').then(centerColon, centerColon);
+} else centerColon();
+
+document.getElementById('ver').textContent = APP_VERSION;
+
+/* ---- 使い方（端末の言語設定に合わせて日本語／英語を自動切り替え） ---- */
+const $guide = document.getElementById('guide');
+const prefLang = ((navigator.languages && navigator.languages[0]) || navigator.language || 'en').toLowerCase();
+const guideLang = prefLang.startsWith('ja') ? 'ja' : 'en';
+$guide.dataset.lang = guideLang;
+$guide.lang = guideLang;
+document.getElementById('guide-close').setAttribute('aria-label', guideLang === 'ja' ? '閉じる' : 'Close');
+document.getElementById('help').setAttribute('aria-label', guideLang === 'ja' ? '使い方' : 'How to use');
+document.getElementById('help').addEventListener('click', ()=>{
+  if ($guide.showModal) $guide.showModal(); else $guide.setAttribute('open','');
+});
+document.getElementById('guide-close').addEventListener('click', ()=> $guide.close ? $guide.close() : $guide.removeAttribute('open'));
+// 外側（背景）をタップしても閉じる
+$guide.addEventListener('click', e=>{ if (e.target === $guide) $guide.close(); });
 
 renderHistory(); render();
 
